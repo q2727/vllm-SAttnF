@@ -23,6 +23,7 @@ from vllm.config.multimodal import MultiModalConfig
 from vllm.config.observability import ObservabilityConfig
 from vllm.config.parallel import EPLBConfig, ParallelConfig
 from vllm.config.pooler import PoolerConfig
+from vllm.config.sattnf import SparseFrameworkConfig
 from vllm.config.scheduler import SchedulerConfig
 from vllm.config.speculative import SpeculativeConfig
 from vllm.config.speech_to_text import SpeechToTextConfig
@@ -80,6 +81,8 @@ __all__ = [
     "PoolerConfig",
     # From vllm.config.scheduler
     "SchedulerConfig",
+    # From vllm.config.sattnf
+    "SparseFrameworkConfig",
     # From vllm.config.speculative
     "SpeculativeConfig",
     # From vllm.config.speech_to_text

@@ -38,6 +38,7 @@ from .model import ModelConfig
 from .observability import ObservabilityConfig
 from .parallel import ParallelConfig
 from .scheduler import SchedulerConfig
+from .sattnf import SparseFrameworkConfig
 from .speculative import SpeculativeConfig
 from .structured_outputs import StructuredOutputsConfig
 from .utils import SupportsHash, config
@@ -90,6 +91,8 @@ class VllmConfig:
         default_factory=ObservabilityConfig
     )
     """Observability configuration."""
+    sattnf_config: SparseFrameworkConfig | None = None
+    """Optional Sparse Attention Framework configuration."""
     quant_config: QuantizationConfig | None = None
     """Quantization configuration."""
     compilation_config: CompilationConfig = Field(default_factory=CompilationConfig)
@@ -189,6 +192,10 @@ class VllmConfig:
             vllm_factors.append("None")
         if self.ec_transfer_config:
             vllm_factors.append(self.ec_transfer_config.compute_hash())
+        else:
+            vllm_factors.append("None")
+        if self.sattnf_config:
+            vllm_factors.append(self.sattnf_config.compute_hash())
         else:
             vllm_factors.append("None")
         if self.additional_config:

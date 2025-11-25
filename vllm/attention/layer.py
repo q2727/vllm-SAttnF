@@ -42,6 +42,7 @@ from vllm.v1.kv_cache_interface import (
     MLAAttentionSpec,
     SlidingWindowSpec,
 )
+from vllm.sattnf.runtime import get_manager_for_config
 
 if current_platform.is_rocm():
     from vllm.platforms.rocm import on_gfx9
@@ -51,6 +52,16 @@ else:
 
 FP8_DTYPE = current_platform.fp8_dtype()
 logger = init_logger(__name__)
+
+
+def _extract_layer_index(prefix: str) -> int | None:
+    """Best effort layer index parsing from module prefix."""
+    if not prefix:
+        return None
+    for token in reversed(prefix.split(".")):
+        if token.isdigit():
+            return int(token)
+    return None
 
 
 def check_upstream_fa_availability(dtype: torch.dtype):
@@ -301,6 +312,7 @@ class Attention(nn.Module, AttentionLayerBase):
             raise ValueError(f"Duplicate layer name: {prefix}")
         compilation_config.static_forward_context[prefix] = self
         self.layer_name = prefix
+        self.sparse_layer_index = _extract_layer_index(prefix)
         self.attn_type = attn_type
 
         if kv_sharing_target_layer_name is not None:
@@ -354,6 +366,12 @@ class Attention(nn.Module, AttentionLayerBase):
         if self.calculate_kv_scales:
             torch.ops.vllm.maybe_calc_kv_scales(query, key, value, self.layer_name)
         output_dtype = query.dtype
+        sparse_executor = None
+        sparse_manager = get_manager_for_config(
+            get_current_vllm_config().sattnf_config
+        )
+        if sparse_manager:
+            sparse_executor = sparse_manager.get_components().executor
         if self.query_quant is not None:
             # quantizing with a simple torch operation enables
             # torch.compile to fuse this into previous ops
@@ -400,6 +418,17 @@ class Attention(nn.Module, AttentionLayerBase):
                 if isinstance(attn_metadata, dict):
                     attn_metadata = attn_metadata[self.layer_name]
                 self_kv_cache = self.kv_cache[forward_context.virtual_engine]
+                if sparse_executor is not None:
+                    sparse_result = sparse_executor.maybe_execute_attention(
+                        layer=self,
+                        query=query,
+                        key=key,
+                        value=value,
+                        kv_cache=self_kv_cache,
+                        attn_metadata=attn_metadata,
+                    )
+                    if sparse_result is not None:
+                        return sparse_result
                 return self.impl.forward(
                     self, query, key, value, self_kv_cache, attn_metadata
                 )
